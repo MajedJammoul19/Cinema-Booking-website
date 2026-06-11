@@ -1,0 +1,17 @@
+@import "tailwindcss";
+
+@theme{
+    --color-primary: #F84565;
+    --color-primary-dull:#D63854;
+}
+
+*{
+    font-family: 'Poppins', sans-serif;
+    scrollbar-width: thin;
+    scrollbar-color: #787777 #1e1e1e;
+}
+
+body{
+    color:white;
+    background-color: #111827;
+}
