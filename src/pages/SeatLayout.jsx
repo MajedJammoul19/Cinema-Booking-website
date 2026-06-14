@@ -8,7 +8,7 @@ import { useApi } from '../hooks/useApi'
 import { useUser } from '@clerk/clerk-react'
 
 const SeatLayout = () => {
-  const groupRows = [["A", "B"], ["C", "D"], ["E", "F"], ["G", "H"], ["I", "J"]]
+  const groupRows = [["A", "B"], ["C", "D"], ["E", "F"], ["G", "H"], ["I","J"]]
   const { id, date } = useParams()
   const navigate = useNavigate()
   const { authFetch, publicFetch } = useApi()
