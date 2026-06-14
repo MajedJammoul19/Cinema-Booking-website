@@ -1,82 +1,83 @@
 import { useParams, useNavigate } from 'react-router-dom'
 import { Calendar, Clock, Star, Play, Users, Film, Heart } from 'lucide-react'
-import { dummyShowsData , dummyDateTimeData } from '../assets/assets'
 import Moviecard from '../components/Moviecard'
 import { useState, useEffect } from 'react'
 import DateSelect from '../components/DateSelect'
 import toast from 'react-hot-toast'
+import { useApi } from '../hooks/useApi'
 
 const MovieDetails = () => {
   const smoothScrollToElement = (targetId, offset = 80) => {
-    const target = document.getElementById(targetId);
-    if (!target) return;
-    
-    const targetPosition = target.getBoundingClientRect().top;
-    const startPosition = window.pageYOffset;
-    const distance = targetPosition - offset;
-    const duration = 800;
-    
-    let startTime = null;
-    
-    const easeInOutCubic = (t) => {
-      return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
-    };
-    
+    const target = document.getElementById(targetId)
+    if (!target) return
+    const distance = target.getBoundingClientRect().top - offset
+    const startPosition = window.pageYOffset
+    const duration = 800
+    let startTime = null
+    const easeInOutCubic = (t) => t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2
     const animation = (currentTime) => {
-      if (startTime === null) startTime = currentTime;
-      const timeElapsed = currentTime - startTime;
-      const progress = Math.min(timeElapsed / duration, 1);
-      const ease = easeInOutCubic(progress);
-      
-      window.scrollTo(0, startPosition + distance * ease);
-      
-      if (timeElapsed < duration) {
-        requestAnimationFrame(animation);
-      }
-    };
-    
-    requestAnimationFrame(animation);
-  };
+      if (startTime === null) startTime = currentTime
+      const progress = Math.min((currentTime - startTime) / duration, 1)
+      window.scrollTo(0, startPosition + distance * easeInOutCubic(progress))
+      if (currentTime - startTime < duration) requestAnimationFrame(animation)
+    }
+    requestAnimationFrame(animation)
+  }
 
   const { id } = useParams()
   const navigate = useNavigate()
+  const { publicFetch } = useApi()
+
+  const [movie, setMovie] = useState(null)
+  const [similarMovies, setSimilarMovies] = useState([])
+  const [isLoading, setIsLoading] = useState(true)
   const [isTrailerOpen, setIsTrailerOpen] = useState(false)
   const [isFavorite, setIsFavorite] = useState(false)
-  
-  // Find the movie by id
-  const movie = dummyShowsData.find(m => m._id === id || m.id.toString() === id)
-  
-  // Get similar movies (excluding current movie)
-  const similarMovies = dummyShowsData
-    .filter(m => m._id !== movie?._id && m.id.toString() !== id)
-    .slice(0, 4)
-  
-  // Check if movie is in favorites on component mount
+
   useEffect(() => {
-    if (movie) {
-      const favorites = JSON.parse(localStorage.getItem('favorites') || '[]')
-      const isFav = favorites.some(fav => fav._id === movie._id)
-      setIsFavorite(isFav)
+    const fetchMovie = async () => {
+      try {
+        setIsLoading(true)
+        // Fetch this movie (includes dateTime)
+        const res = await publicFetch(`/api/movies/${id}`)
+        const data = await res.json()
+
+        if (!data.success) {
+          setMovie(null)
+          return
+        }
+
+        setMovie(data.movie)
+
+        // Check favorites
+        const favorites = JSON.parse(localStorage.getItem('favorites') || '[]')
+        setIsFavorite(favorites.some(fav => fav._id === data.movie._id))
+
+        // Fetch all movies for "similar" section
+        const allRes = await publicFetch('/api/movies')
+        const allData = await allRes.json()
+        if (allData.success) {
+          setSimilarMovies(allData.movies.filter(m => m._id !== id).slice(0, 4))
+        }
+      } catch (error) {
+        console.error('Failed to fetch movie:', error)
+      } finally {
+        setIsLoading(false)
+      }
     }
-  }, [movie])
-  
-  // Handle add/remove from favorites
+    fetchMovie()
+  }, [id])
+
   const toggleFavorite = () => {
     if (!movie) return
-    
     const favorites = JSON.parse(localStorage.getItem('favorites') || '[]')
-    
     if (isFavorite) {
-      // Remove from favorites
-      const updatedFavorites = favorites.filter(fav => fav._id !== movie._id)
-      localStorage.setItem('favorites', JSON.stringify(updatedFavorites))
+      localStorage.setItem('favorites', JSON.stringify(favorites.filter(f => f._id !== movie._id)))
       setIsFavorite(false)
       toast.success(`${movie.title} removed from favorites`)
     } else {
-      // Add to favorites
-      const favoriteMovie = {
+      favorites.push({
         _id: movie._id,
-        id: movie.id,
         title: movie.title,
         poster_path: movie.poster_path,
         backdrop_path: movie.backdrop_path,
@@ -87,15 +88,33 @@ const MovieDetails = () => {
         release_date: movie.release_date,
         genres: movie.genres,
         tagline: movie.tagline,
-        addedToFavorites: new Date().toISOString()
-      }
-      favorites.push(favoriteMovie)
+        addedToFavorites: new Date().toISOString(),
+      })
       localStorage.setItem('favorites', JSON.stringify(favorites))
       setIsFavorite(true)
       toast.success(`${movie.title} added to favorites`)
     }
   }
-  
+
+  const formatRuntime = (minutes) => {
+    const h = Math.floor(minutes / 60)
+    const m = minutes % 60
+    if (h === 0) return `${m}m`
+    if (m === 0) return `${h}h`
+    return `${h}h ${m}m`
+  }
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-gray-900 to-black flex items-center justify-center">
+        <div className="text-center">
+          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-red-500 mx-auto"></div>
+          <p className="text-gray-400 mt-4">Loading movie...</p>
+        </div>
+      </div>
+    )
+  }
+
   if (!movie) {
     return (
       <div className="min-h-screen bg-gradient-to-b from-gray-900 to-black flex items-center justify-center px-6">
@@ -103,73 +122,55 @@ const MovieDetails = () => {
           <div className="text-6xl mb-4">🎬</div>
           <h2 className="text-2xl font-semibold text-white mb-2">Movie Not Found</h2>
           <p className="text-gray-400 mb-6">The movie you're looking for doesn't exist</p>
-          <button 
-            onClick={() => navigate('/movies')}
-            className="bg-red-600 hover:bg-red-700 text-white font-semibold px-6 py-2 rounded-lg transition"
-          >
+          <button onClick={() => navigate('/movies')} className="bg-red-600 hover:bg-red-700 text-white font-semibold px-6 py-2 rounded-lg transition">
             Back to Movies
           </button>
         </div>
       </div>
     )
   }
-  
-  // Format runtime
-  const formatRuntime = (minutes) => {
-    const hours = Math.floor(minutes / 60)
-    const remainingMinutes = minutes % 60
-    if (hours === 0) return `${remainingMinutes}m`
-    if (remainingMinutes === 0) return `${hours}h`
-    return `${hours}h ${remainingMinutes}m`
-  }
-  
+
+  // dateTime from MongoDB is a Map — convert to plain object for DateSelect
+  const dateTime = movie.dateTime instanceof Map
+    ? Object.fromEntries(movie.dateTime)
+    : movie.dateTime || {}
+
   return (
     <div className="min-h-screen mt-30 bg-gradient-to-b from-gray-900 to-black">
-      
+
       {/* Movie Details Section */}
       <div className="px-6 md:px-16 lg:px-24 xl:px-44 pb-12">
         <div className="flex flex-col lg:flex-row gap-8 lg:gap-12">
-          {/* Left Side - Movie Poster */}
+
+          {/* Left Side - Poster */}
           <div className="lg:w-1/3">
             <div className="sticky top-8">
-              <img 
-                src={movie.poster_path} 
-                alt={movie.title}
-                className="w-full rounded-xl shadow-2xl"
-              />
+              <img src={movie.poster_path} alt={movie.title} className="w-full rounded-xl shadow-2xl" />
               <div className="flex gap-3 mt-6">
-                <button 
+                <button
                   onClick={() => setIsTrailerOpen(true)}
                   className="flex-1 bg-red-600 hover:bg-red-700 text-white font-semibold py-3 rounded-lg flex items-center justify-center gap-2 transition"
                 >
-                  <Play className="w-5 h-5 fill-white" />
-                  Watch Trailer
+                  <Play className="w-5 h-5 fill-white" /> Watch Trailer
                 </button>
-                <button 
+                <button
                   onClick={toggleFavorite}
-                  className={`p-3 rounded-lg transition ${
-                    isFavorite 
-                      ? 'bg-red-600 hover:bg-red-700 text-white' 
-                      : 'bg-gray-800 hover:bg-gray-700 text-white'
-                  }`}
+                  className={`p-3 rounded-lg transition ${isFavorite ? 'bg-red-600 hover:bg-red-700 text-white' : 'bg-gray-800 hover:bg-gray-700 text-white'}`}
                 >
                   <Heart className={`w-5 h-5 ${isFavorite ? 'fill-white' : ''}`} />
                 </button>
               </div>
             </div>
           </div>
-          
-          {/* Right Side - Movie Details */}
+
+          {/* Right Side - Details */}
           <div className="lg:w-2/3">
-            <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-3">
-              {movie.title}
-            </h1>
-            
+            <h1 className="text-3xl md:text-4xl lg:text-5xl font-bold text-white mb-3">{movie.title}</h1>
+
             {movie.tagline && (
               <p className="text-gray-400 text-lg italic mb-4">"{movie.tagline}"</p>
             )}
-            
-            {/* Meta Info */}
+
             <div className="flex flex-wrap items-center gap-4 text-gray-300 text-sm mb-6">
               <div className="flex items-center gap-1">
                 <Star className="w-4 h-4 text-yellow-400 fill-yellow-400" />
@@ -189,28 +190,20 @@ const MovieDetails = () => {
                 <span>{movie.original_language?.toUpperCase()}</span>
               </div>
             </div>
-            
-            {/* Genres */}
+
             <div className="flex flex-wrap gap-2 mb-6">
               {movie.genres?.map((genre) => (
-                <span 
-                  key={genre.id}
-                  className="bg-gray-800 text-gray-300 px-3 py-1 rounded-full text-sm"
-                >
+                <span key={genre.id} className="bg-gray-800 text-gray-300 px-3 py-1 rounded-full text-sm">
                   {genre.name}
                 </span>
               ))}
             </div>
-            
-            {/* Overview */}
+
             <div className="mb-6">
               <h2 className="text-xl font-semibold text-white mb-3">Overview</h2>
-              <p className="text-gray-300 leading-relaxed">
-                {movie.overview}
-              </p>
+              <p className="text-gray-300 leading-relaxed">{movie.overview}</p>
             </div>
-            
-            {/* Additional Info */}
+
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-8 p-4 bg-gray-800/50 rounded-lg">
               {movie.release_date && (
                 <div>
@@ -239,7 +232,8 @@ const MovieDetails = () => {
                 </div>
               )}
             </div>
-            <button 
+
+            <button
               onClick={() => smoothScrollToElement('dateSelect', 80)}
               className="bg-red-500 hover:bg-red-600 text-white py-2 px-6 rounded-lg transition"
             >
@@ -248,26 +242,20 @@ const MovieDetails = () => {
           </div>
         </div>
       </div>
-      
+
       {/* Cast Section */}
       {movie.casts && movie.casts.length > 0 && (
         <div className="px-6 md:px-16 lg:px-24 xl:px-44 mt-12">
           <div className="relative mb-6">
             <h2 className="text-2xl font-semibold text-white flex items-center gap-2">
-              <Users className="w-6 h-6" />
-              Cast & Crew
+              <Users className="w-6 h-6" /> Cast & Crew
             </h2>
             <div className="absolute -bottom-2 left-0 w-16 h-1 bg-red-500 rounded-full"></div>
           </div>
-          
           <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-6 gap-4">
             {movie.casts.slice(0, 12).map((cast, index) => (
               <div key={index} className="bg-gray-800 rounded-lg overflow-hidden hover:transform hover:scale-105 transition duration-300">
-                <img 
-                  src={cast.profile_path} 
-                  alt={cast.name}
-                  className="w-full h-48 object-cover"
-                />
+                <img src={cast.profile_path} alt={cast.name} className="w-full h-48 object-cover" />
                 <div className="p-2 text-center">
                   <p className="text-white text-sm font-medium truncate">{cast.name}</p>
                   <p className="text-gray-400 text-xs">Actor</p>
@@ -277,39 +265,30 @@ const MovieDetails = () => {
           </div>
         </div>
       )}
-      
-      <DateSelect dateTime={dummyDateTimeData} id={id}/>
-      
-      {/* Similar Movies Section */}
+
+      {/* Date Select - passes dateTime from MongoDB */}
+      <DateSelect dateTime={dateTime} id={id} />
+
+      {/* Similar Movies */}
       {similarMovies.length > 0 && (
         <div className="px-6 md:px-16 lg:px-24 xl:px-44 mt-16 pb-12">
           <div className="relative mb-6">
             <h2 className="text-2xl font-semibold text-white">You May Also Like</h2>
             <div className="absolute -bottom-2 left-0 w-16 h-1 bg-red-500 rounded-full"></div>
           </div>
-          
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6">
-            {similarMovies.map((similarMovie) => (
-              <Moviecard key={similarMovie._id} movie={similarMovie} />
+            {similarMovies.map((m) => (
+              <Moviecard key={m._id} movie={m} />
             ))}
           </div>
         </div>
       )}
-      
+
       {/* Trailer Modal */}
       {isTrailerOpen && movie.trailer_url && (
-        <div 
-          className="fixed inset-0 bg-black/95 z-50 flex items-center justify-center p-4"
-          onClick={() => setIsTrailerOpen(false)}
-        >
-          <div 
-            className="relative w-full max-w-4xl bg-black rounded-xl overflow-hidden"
-            onClick={(e) => e.stopPropagation()}
-          >
-            <button 
-              onClick={() => setIsTrailerOpen(false)}
-              className="absolute top-4 right-4 z-10 bg-black/50 hover:bg-red-600 rounded-full p-2 transition"
-            >
+        <div className="fixed inset-0 bg-black/95 z-50 flex items-center justify-center p-4" onClick={() => setIsTrailerOpen(false)}>
+          <div className="relative w-full max-w-4xl bg-black rounded-xl overflow-hidden" onClick={(e) => e.stopPropagation()}>
+            <button onClick={() => setIsTrailerOpen(false)} className="absolute top-4 right-4 z-10 bg-black/50 hover:bg-red-600 rounded-full p-2 transition">
               <svg className="w-6 h-6 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
@@ -322,7 +301,7 @@ const MovieDetails = () => {
                 allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                 allowFullScreen
                 className="absolute top-0 left-0 w-full h-full"
-              ></iframe>
+              />
             </div>
           </div>
         </div>

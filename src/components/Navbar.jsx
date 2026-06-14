@@ -2,14 +2,31 @@ import { Link , useNavigate } from 'react-router-dom'
 import { assets } from '../assets/assets'
 import { MenuIcon, SearchIcon, TicketPlus, XIcon } from 'lucide-react'
 import { useState } from 'react'
+import { useAuth } from '@clerk/clerk-react'
 import {useUser,useClerk, UserButton} from '@clerk/clerk-react'
 const Navbar = () => {
   const navigate = useNavigate()
   const [isMenuOpen, setIsMenuOpen] = useState(false)
 const {user}=useUser();
 const {openSignIn}=useClerk();
+const TestButton = () => {
+  const { getToken } = useAuth()
+
+  const testApi = async () => {
+    const token = await getToken()
+    const res = await fetch('http://localhost:5000/api/users/me', {
+      headers: { Authorization: `Bearer ${token}` }
+    })
+    const data = await res.json()
+    console.log(data)
+  }
+
+  return <button onClick={testApi}>Test API</button>
+}
+
   return (
     <div className='fixed top-0 left-0 z-50 w-full flex items-center justify-between px-6 md:px-16 lg:px-36 py-5'>
+     
       <Link className='max-md:flex-1' to="/">
         <img src={assets.logo} alt="" className="w-36 h-auto" />
       </Link>
